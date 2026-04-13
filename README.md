@@ -1,6 +1,6 @@
 # Sentry Noise Filter for Laravel
 
-A drop-in package that filters common noise from your [Sentry](https://sentry.io/) or [GlitchTip](https://glitchtip.com/) error tracking. Install it, set your DSN, done.
+A drop-in package that sets up [Sentry](https://sentry.io/) / [GlitchTip](https://glitchtip.com/) error tracking and filters common noise. Install it, set your DSN, done.
 
 ## The Problem
 
@@ -18,15 +18,38 @@ This package silently suppresses these before they reach your error tracker, so 
 composer require schmeits/sentry-noise-filter
 ```
 
-That's it. The package auto-discovers its ServiceProvider — no manual registration needed.
-
-### If you don't have Sentry configured yet
-
-The package requires `sentry/sentry-laravel`. If it's not installed yet, it will be pulled in automatically. Then add your DSN to `.env`:
+Add your DSN to `.env`:
 
 ```env
 SENTRY_LARAVEL_DSN=https://your-key@your-glitchtip-or-sentry-instance/project-id
 ```
+
+That's it. The package:
+- Pulls in `sentry/sentry-laravel` automatically
+- Auto-registers the exception handler (no `bootstrap/app.php` changes needed)
+- Applies the noise filter to all outgoing error events
+
+### Migrating from manual Sentry setup
+
+If you previously had `Integration::handles($exceptions)` in `bootstrap/app.php`, you can remove it — the package handles this automatically:
+
+```php
+// bootstrap/app.php — REMOVE this block:
+->withExceptions(function (Exceptions $exceptions) {
+    Integration::handles($exceptions);  // No longer needed
+})
+```
+
+### Recommended .env settings
+
+```env
+SENTRY_LARAVEL_DSN=https://your-key@your-instance/project-id
+SENTRY_SEND_DEFAULT_PII=false
+SENTRY_TRACES_SAMPLE_RATE=0
+```
+
+- `SENTRY_SEND_DEFAULT_PII=false` — Don't send personal data (IP, cookies, user info). Set to `true` only if you need it for debugging.
+- `SENTRY_TRACES_SAMPLE_RATE=0` — Disables performance monitoring. Set to `0.1` (10% of requests) if you want performance data.
 
 ## Configuration
 
@@ -36,7 +59,7 @@ The default configuration works out of the box. To customize the filter patterns
 php artisan vendor:publish --tag=sentry-filter-config
 ```
 
-This creates `config/sentry-filter.php` where you can:
+This creates `config/sentry-filter.php`:
 
 ```php
 return [
@@ -72,17 +95,16 @@ return [
 
 ## How It Works
 
-The package hooks into Sentry's `before_send` callback via the Laravel config system. When an error event is about to be sent:
+The package does two things automatically on boot:
 
-1. It checks the exception type and message against all configured patterns
-2. If any pattern matches, the event is suppressed (returns `null`)
-3. If no pattern matches, the event is passed through to any existing `before_send` callback
+1. **Registers exception handling** — Equivalent to `Integration::handles()` in `bootstrap/app.php`, but done automatically via the ServiceProvider
+2. **Applies noise filtering** — Hooks into Sentry's `before_send` callback. When an error is about to be sent, it checks the exception type and message against all configured patterns. Matches are suppressed, everything else passes through.
 
-This means it **chains with existing filters** — if your project already has a custom `before_send` in `config/sentry.php`, it will still run after the noise filter.
+The noise filter **chains with existing filters** — if your project already has a custom `before_send` in `config/sentry.php`, it will still run after the noise filter.
 
 ## Disabling
 
-Set the environment variable to disable filtering without removing the package:
+Disable filtering without removing the package:
 
 ```env
 SENTRY_FILTER_ENABLED=false
