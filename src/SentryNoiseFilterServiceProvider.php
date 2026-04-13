@@ -42,7 +42,7 @@ class SentryNoiseFilterServiceProvider extends ServiceProvider
 
     /**
      * Auto-register Sentry exception handling.
-     * Replaces the need for Integration::handles($exceptions) in bootstrap/app.php.
+     * Safe to use alongside Integration::handles() — dedup in before_send prevents double events.
      */
     private function registerExceptionHandler(): void
     {
@@ -56,25 +56,41 @@ class SentryNoiseFilterServiceProvider extends ServiceProvider
     }
 
     /**
-     * Hook the noise filter into Sentry's before_send callback.
+     * Hook the noise filter + dedup into Sentry's before_send callback.
      * Chains with any existing before_send from the project's config/sentry.php.
+     *
+     * Dedup prevents double events when both this package and Integration::handles()
+     * are active — safe to use with or without the manual bootstrap/app.php setup.
      */
     private function registerNoiseFilter(): void
     {
-        if (! config('sentry-filter.enabled', true)) {
-            return;
-        }
-
         $existingBeforeSend = config('sentry.before_send');
-        $noiseFilter = new NoiseFilter;
+        $noiseFilter = config('sentry-filter.enabled', true) ? new NoiseFilter : null;
+        $sentThisRequest = [];
 
-        config(['sentry.before_send' => function (\Sentry\Event $event) use ($existingBeforeSend, $noiseFilter): ?\Sentry\Event {
-            $result = $noiseFilter($event);
+        config(['sentry.before_send' => function (\Sentry\Event $event) use ($existingBeforeSend, $noiseFilter, &$sentThisRequest): ?\Sentry\Event {
+            // Dedup: prevent double events from multiple exception handlers
+            $exceptions = $event->getExceptions();
+            if (! empty($exceptions)) {
+                $sig = ($exceptions[0]->getType() ?? '') . ':' . ($exceptions[0]->getValue() ?? '');
 
-            if ($result === null) {
-                return null;
+                if (in_array($sig, $sentThisRequest, true)) {
+                    return null;
+                }
+
+                $sentThisRequest[] = $sig;
             }
 
+            // Noise filter
+            if ($noiseFilter !== null) {
+                $result = $noiseFilter($event);
+
+                if ($result === null) {
+                    return null;
+                }
+            }
+
+            // Chain with any existing before_send from the project
             if (is_callable($existingBeforeSend)) {
                 return $existingBeforeSend($event);
             }
