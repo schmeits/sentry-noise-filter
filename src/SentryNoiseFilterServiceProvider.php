@@ -7,6 +7,9 @@ declare(strict_types=1);
  *
  * Registers Sentry exception handling + noise filter automatically.
  * Auto-discovered by Laravel — no manual registration or bootstrap/app.php changes needed.
+ *
+ * Hooks the before_send callback directly on the Sentry client's Options object
+ * instead of via Laravel config, so `config:cache` remains possible (closures can't be cached).
  */
 
 namespace Schmeits\SentryNoiseFilter;
@@ -14,6 +17,7 @@ namespace Schmeits\SentryNoiseFilter;
 use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Support\ServiceProvider;
 use Sentry\Laravel\Integration;
+use Sentry\SentrySdk;
 
 class SentryNoiseFilterServiceProvider extends ServiceProvider
 {
@@ -57,18 +61,25 @@ class SentryNoiseFilterServiceProvider extends ServiceProvider
 
     /**
      * Hook the noise filter + dedup into Sentry's before_send callback.
-     * Chains with any existing before_send from the project's config/sentry.php.
+     * Wraps any existing before_send from the Sentry client options.
      *
-     * Dedup prevents double events when both this package and Integration::handles()
-     * are active — safe to use with or without the manual bootstrap/app.php setup.
+     * Uses the Sentry client's Options directly (not Laravel config) so `config:cache`
+     * continues to work — closures can't be serialized to a compiled config cache.
      */
     private function registerNoiseFilter(): void
     {
-        $existingBeforeSend = config('sentry.before_send');
+        $client = SentrySdk::getCurrentHub()->getClient();
+
+        if ($client === null) {
+            return;
+        }
+
+        $options = $client->getOptions();
+        $existingBeforeSend = $options->getBeforeSendCallback();
         $noiseFilter = config('sentry-filter.enabled', true) ? new NoiseFilter : null;
         $sentThisRequest = [];
 
-        config(['sentry.before_send' => function (\Sentry\Event $event) use ($existingBeforeSend, $noiseFilter, &$sentThisRequest): ?\Sentry\Event {
+        $options->setBeforeSendCallback(function (\Sentry\Event $event, ?\Sentry\EventHint $hint = null) use ($existingBeforeSend, $noiseFilter, &$sentThisRequest): ?\Sentry\Event {
             // Dedup: prevent double events from multiple exception handlers
             $exceptions = $event->getExceptions();
             if (! empty($exceptions)) {
@@ -92,10 +103,10 @@ class SentryNoiseFilterServiceProvider extends ServiceProvider
 
             // Chain with any existing before_send from the project
             if (is_callable($existingBeforeSend)) {
-                return $existingBeforeSend($event);
+                return $existingBeforeSend($event, $hint);
             }
 
             return $event;
-        }]);
+        });
     }
 }
