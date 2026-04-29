@@ -13,9 +13,18 @@
         "php": "^8.2",
         "sentry/sentry-laravel": "^4.0"
     },
+    "require-dev": {
+        "pestphp/pest": "^4.0",
+        "mockery/mockery": "^1.6"
+    },
     "autoload": {
         "psr-4": {
             "Schmeits\\SentryNoiseFilter\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Schmeits\\SentryNoiseFilter\\Tests\\": "tests/"
         }
     },
     "extra": {
@@ -23,6 +32,14 @@
             "providers": [
                 "Schmeits\\SentryNoiseFilter\\SentryNoiseFilterServiceProvider"
             ]
+        }
+    },
+    "scripts": {
+        "test": "vendor/bin/pest"
+    },
+    "config": {
+        "allow-plugins": {
+            "pestphp/pest-plugin": true
         }
     },
     "minimum-stability": "stable"

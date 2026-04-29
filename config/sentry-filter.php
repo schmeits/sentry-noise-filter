@@ -75,4 +75,29 @@ return [
     */
     'extra_patterns' => [],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Stack-aware patterns
+    |--------------------------------------------------------------------------
+    |
+    | Each entry is a pair: ['value' => ..., 'frame' => ...].
+    |   - 'value' is matched against the exception type + message
+    |   - 'frame' is matched against any stacktrace frame's file path
+    | The event is only suppressed when BOTH match. Use this when the message
+    | alone is too generic to filter on (for example a vanilla
+    | "Trying to access array offset on null" ErrorException), but the
+    | combination with a specific vendor frame is uniquely bot-spam.
+    |
+    */
+    'stack_patterns' => [
+        // Livewire 3 receives malformed snapshot payloads from bots and bubbles
+        // an ErrorException at HandleComponents::update line 88
+        // ($snapshot['data']). Livewire 4 added strict snapshot validation, but
+        // 3.x apps will keep seeing this. Combination is unique bot-spam.
+        [
+            'value' => 'Trying to access array offset on null',
+            'frame' => 'Mechanisms/HandleComponents/HandleComponents.php',
+        ],
+    ],
+
 ];

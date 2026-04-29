@@ -90,8 +90,30 @@ return [
     'extra_patterns' => [
         // 'Some noisy error you want to suppress',
     ],
+
+    // Stack-aware patterns (since v1.4)
+    // Each entry is a pair: ['value' => ..., 'frame' => ...]. The event is only
+    // suppressed when BOTH match. Use this when the message alone is too generic
+    // to filter on, but the combination with a specific vendor frame is unique.
+    'stack_patterns' => [
+        // Livewire 3 ErrorException from bots posting malformed snapshots.
+        // Fixed in Livewire 4 with strict snapshot validation.
+        [
+            'value' => 'Trying to access array offset on null',
+            'frame' => 'Mechanisms/HandleComponents/HandleComponents.php',
+        ],
+    ],
 ];
 ```
+
+### Simple vs. stack-aware patterns
+
+| Pattern type | Matches against | Use when |
+|---|---|---|
+| `bot_patterns` / `infra_patterns` / `dev_patterns` / `extra_patterns` | exception type + message | the message itself is unique enough to identify noise |
+| `stack_patterns` | exception type + message AND a stacktrace frame | the message is generic (e.g. `Trying to access array offset on null`), but the combination with a specific vendor frame is uniquely bot-spam |
+
+Both pattern types use case-sensitive substring matching.
 
 ## How It Works
 
