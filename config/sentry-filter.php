@@ -62,6 +62,7 @@ return [
     'dev_patterns' => [
         'Vite manifest not found',
         'Command "boost" is not defined',
+        'There are no commands defined in the "boost"',
     ],
 
     /*

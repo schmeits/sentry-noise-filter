@@ -112,6 +112,19 @@ test('does not suppress when only the frame matches but the value does not', fun
     expect((new NoiseFilter)($event))->toBe($event);
 });
 
+test('suppresses boost-namespace errors leaking from production composer scripts', function (): void {
+    TestConfig::set('sentry-filter.dev_patterns', [
+        'There are no commands defined in the "boost"',
+    ]);
+
+    $event = makeEvent(
+        'Symfony\\Component\\Console\\Exception\\NamespaceNotFoundException',
+        'There are no commands defined in the "boost" namespace.',
+    );
+
+    expect((new NoiseFilter)($event))->toBeNull();
+});
+
 test('passes events through when no exception is attached', function (): void {
     TestConfig::set('sentry-filter.bot_patterns', ['anything']);
 
